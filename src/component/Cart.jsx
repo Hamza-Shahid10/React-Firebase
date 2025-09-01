@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { db } from "../config/firebase";
-import { collection, query, where, getDocs, deleteDoc, doc, updateDoc, onSnapshot } from "firebase/firestore";
+import { collection, query, where, getDoc, deleteDoc, doc, updateDoc, onSnapshot } from "firebase/firestore";
 import Swal from "sweetalert2";
 
 export default function Cart() {
@@ -9,24 +9,25 @@ export default function Cart() {
   const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    if (!authUser) {
+    if (!authUser?.uid) {
       window.location.href = "/login";
       return;
     }
 
-    const q = query(collection(db, "cart"), where("userEmail", "==", authUser.email));
-    const unsub = onSnapshot(q, (snapshot) => {
-      const items = snapshot.docs.map(docSnap => ({
-        id: docSnap.id,
-        quantity: docSnap.data().quantity || 1,
-        ...docSnap.data()
-      }));
-      setCartItems(items);
-      calculateTotal(items);
+    const cartRef = doc(db, "cart", authUser.uid);
+    const unsub = onSnapshot(cartRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const items = data.items || [];
+        setCartItems(items); // items will be an array of product IDs
+        calculateTotal(items);
+      } else {
+        setCartItems([]);
+      }
     });
 
     return () => unsub();
-  }, []);
+  }, [authUser]);
 
   const calculateTotal = (items) => {
     const totalPrice = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -35,9 +36,23 @@ export default function Cart() {
 
   const handleQuantityChange = async (id, qty) => {
     if (qty < 1) qty = 1;
-    await updateDoc(doc(db, "cartItems", id), { quantity: qty });
+  
+    const cartRef = doc(db, "cart", authUser.uid);
+    const snap = await getDoc(cartRef);
+  
+    if (snap.exists()) {
+      const data = snap.data();
+      let items = data.items || [];
+  
+      // update quantity for the matching item
+      items = items.map(item =>
+        item.id === id ? { ...item, quantity: qty } : item
+      );
+  
+      await updateDoc(cartRef, { items });
+    }
   };
-
+  
   const handleRemove = async (id) => {
     Swal.fire({
       title: "Remove item?",
@@ -47,11 +62,23 @@ export default function Cart() {
       confirmButtonText: "Yes, remove it"
     }).then(async (res) => {
       if (res.isConfirmed) {
-        await deleteDoc(doc(db, "cartItems", id));
-        Swal.fire("Removed!", "Item has been removed.", "success");
+        const cartRef = doc(db, "cart", authUser.uid);
+        const snap = await getDoc(cartRef);
+  
+        if (snap.exists()) {
+          const data = snap.data();
+          let items = data.items || [];
+  
+          // remove the item
+          items = items.filter(item => item.id !== id);
+  
+          await updateDoc(cartRef, { items });
+          Swal.fire("Removed!", "Item has been removed.", "success");
+        }
       }
     });
   };
+  
 
   return (
     <div className="container py-4">
@@ -61,13 +88,14 @@ export default function Cart() {
       ) : (
         <div className="row g-3">
           {cartItems.map(item => (
+            // console.log(item),
             <div key={item.id} className="col-md-4">
               <div className="card h-100">
                 <img src={item.imageUrl} className="card-img-top" style={{ height: "200px", objectFit: "cover" }} />
                 <div className="card-body d-flex flex-column">
                   <h5 className="card-title">{item.title}</h5>
                   <p className="text-muted">{item.description}</p>
-                  <p className="fw-bold text-success">${item.price.toFixed(2)}</p>
+                  <p className="fw-bold text-success">${item.price}</p>
                   <div className="mb-2 d-flex align-items-center">
                     <label className="me-2">Qty:</label>
                     <input type="number" value={item.quantity} min={1} className="form-control w-50"

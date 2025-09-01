@@ -9,7 +9,7 @@ import {
     doc,
     query,
     onSnapshot,
-    setDoc, 
+    setDoc,
     getDoc,
 } from "firebase/firestore";
 import Swal from "sweetalert2";
@@ -90,30 +90,45 @@ export default function Dashboard() {
         });
     };
 
-    const handleAddToCart = async (id) => {
+    const handleAddToCart = async (product) => {
+        console.log(product);
         try {
-          const cartRef = doc(db, "cart", authUser?.uid);
-          const snap = await getDoc(cartRef);
-      
-          if (snap.exists()) {
-            const data = snap.data();
-            const items = data.items || [];
-            if (!items.includes(id)) {
-              await updateDoc(cartRef, {
-                items: [...items, id],
-              });
+            const cartRef = doc(db, "cart", authUser?.uid);
+            const snap = await getDoc(cartRef);
+
+            if (snap.exists()) {
+                const data = snap.data();
+                const items = data.items || [];
+
+                // check if product already exists in cart
+                const existingIndex = items.findIndex(item => item.id === product.id);
+
+                if (existingIndex !== -1) {
+                    // update quantity if already in cart
+                    items[existingIndex].quantity += 1;
+                    await updateDoc(cartRef, { items });
+                } else {
+                    // add new product object
+                    await updateDoc(cartRef, {
+                        items: [...items, { id: product.id, title: product.title, price: product.price, imageUrl: product.imageUrl, quantity: 1 }]
+                    });
+                }
+            } else {
+                // create new cart doc
+                await setDoc(cartRef, {
+                    items: [{ id: product.id, title: product.title, price: product.price, imageUrl: product.imageUrl, description: product.description, quantity: 1 }]
+                });
             }
-          } else {
-            // create new cart doc
-            await setDoc(cartRef, { items: [id] });
-          }
-      
-          Swal.fire("Added!", "Product added to cart.", "success");
+
+            Swal.fire("Added!", "Product added to cart.", "success");
         } catch (err) {
-          console.error(err);
-          Swal.fire("Error!", "Something went wrong.", "error");
+            console.error(err);
+            Swal.fire("Error!", "Something went wrong.", "error");
         }
-      };
+    };
+
+
+
     return (
         <div className="d-flex">
             {/* Sidebar */}
@@ -167,7 +182,7 @@ export default function Dashboard() {
                                                 </Button>
                                             </>
                                         ) : (
-                                            <Button variant="success" size="sm" className="w-100" onClick={() => handleAddToCart(product.id)}>
+                                            <Button variant="success" size="sm" className="w-100" onClick={() => handleAddToCart(product)}>
                                                 Add to Cart
                                             </Button>
                                         )}
