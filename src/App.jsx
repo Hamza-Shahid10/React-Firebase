@@ -11,7 +11,7 @@ export default function App() {
     <div className="app-shell">
       <Header /> 
 
-      <main className="page p-4">
+      <main>
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<Login />} />
